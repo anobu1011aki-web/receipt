@@ -1,1 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>領収書発行システム_窓口運用版（記録機能付）</title>
+    <style>
+        /* =========================================
+           入力画面UI
+           ========================================= */
+        :root { --primary: #004098; --bg: #f1f5f9; --accent: #10b981; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #334155; }
+        .no-print-container { max-width: 950px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: var(--primary); font-size: 1.5rem; margin-bottom: 20px; }
+        
+        .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        .input-card { background: #fff; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+        label { display: block; font-weight: bold; font-size: 0.85rem; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        
+        .res-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .fac-sel { flex: 2; } .date-sel { flex: 2; } .time-sel { flex: 1; }
+        
+        /* 右側サイドバーをスクロール追従させるコンテナ */
+        .sidebar-sticky { position: sticky; top: 20px; display: flex; flex-direction: column; gap: 15px; }
+        
+        .calc-panel { background: #f8fafc; border: 2px solid var(--primary); padding: 20px; border-radius: 8px; }
+        .total-display { font-size: 2rem; font-weight: bold; color: var(--primary); text-align: center; margin-bottom: 15px; }
+        .change-group { border-top: 1px solid #cbd5e1; padding-top: 15px; margin-top: 15px; }
+        .change-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .change-val { font-size: 1.5rem; font-weight: bold; color: #e11d48; }
+        .formula-log { font-size: 0.85rem; background: #fff; padding: 10px; border-radius: 4px; border: 1px inset #e2e8f0; max-height: 200px; overflow-y: auto; line-height: 1.5; color: #334155; }
 
+        .print-btn { width: 100%; padding: 15px; background: var(--accent); color: white; border: none; font-size: 1.1rem; font-weight: bold; cursor: pointer; border-radius: 8px; margin-top: 15px; }
+        .print-btn:disabled { background: #94a3b8; cursor: wait; }
+
+        /* 料金表用CSS（コンパクト版） */
+        .fee-table-container { margin-top: 30px; padding: 20px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; display: flex; gap: 20px; flex-wrap: wrap; }
+        .fee-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: center; background: white; margin-bottom: 5px; }
+        .fee-table th, .fee-table td { border: 1px solid #94a3b8; padding: 8px; }
+        .fee-table th { background: #e2e8f0; font-weight: bold; }
+        .diagonal-cell { background: linear-gradient(to bottom right, transparent 49%, #94a3b8 49%, #94a3b8 51%, transparent 51%); }
+        .fee-note { font-size: 0.8rem; color: #64748b; }
+
+        /* =========================================
+           印刷用レイアウト
+           ========================================= */
+        .print-only { display: none; }
+        @media print {
+            @page { size: A4 portrait; margin: 0; }
+            html, body { width: 210mm; height: 297mm; margin: 0; padding: 0; background: white; }
+            .no-print-container { display: none !important; }
+            
+            .print-only { display: block; width: 210mm; height: 297mm; overflow: hidden; }
+            
+            .receipt-section {
+                height: 148.5mm; 
+                padding: 12mm 15mm;
+                box-sizing: border-box;
+                position: relative;
+                font-family: "MS Mincho", serif;
+            }
+            .p-type { position: absolute; right: 15mm; top: 12mm; border: 1pt solid #000; padding: 1mm 3mm; font-size: 11pt; }
+            .p-title { text-align: center; font-size: 24pt; font-weight: bold; margin-bottom: 4mm; letter-spacing: 12px; }
+            .p-client { font-size: 17pt; border-bottom: 1pt solid #000; display: inline-block; min-width: 95mm; margin-bottom: 5mm; }
+            .p-amount { font-size: 22pt; text-align: center; border: 2.5pt double #000; padding: 3mm; margin-bottom: 3mm; font-weight: bold; width: 100%; box-sizing: border-box; }
+            
+            .p-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 2mm; }
+            .p-table th, .p-table td { border: 0.5pt solid #000; padding: 4px 5px; text-align: left; height: 16px; }
+            .p-table th { background: #f0f0f0; text-align: center; }
+            
+            .p-info-flex { display: flex; justify-content: space-between; align-items: flex-start; }
+            .p-date { font-size: 11pt; }
+            .p-tax-box { text-align: right; font-size: 9.5pt; line-height: 1.4; }
+            
+            .p-stamp { position: absolute; left: 15mm; bottom: 12mm; width: 22mm; height: 22mm; border: 0.5pt solid #000; text-align: center; line-height: 22mm; font-size: 8pt; color: #888; }
+            
+            .p-issuer { position: absolute; right: 15mm; bottom: 12mm; text-align: right; line-height: 1.5; }
+            .p-issuer strong { font-size: 14pt; display: block; margin-bottom: 1mm; } 
+            .p-issuer .p-address { font-size: 10.5pt; } 
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print-container">
+    <h1>領収書発行システム（窓口運用版）</h1>
+    <div class="grid">
+        <div class="main-inputs">
+            <div class="input-card">
+                <div style="display:flex; gap:15px; margin-bottom:10px;">
+                    <div style="flex:2;">
+                        <label>宛名</label><input type="text" id="in_name" placeholder="公益財団法人沖縄県スポーツ協会 殿" oninput="calc()">
+                    </div>
+                    <div style="flex:1;">
+                        <label>受付担当者</label><input type="text" id="in_staff" placeholder="例: 沖縄" oninput="calc()">
+                    </div>
+                </div>
+                <div style="display:flex; gap:15px;">
+                    <div style="flex:1;">
+                        <label>区分</label>
+                        <select id="in_cat" onchange="calc()">
+                            <option value="その他一般" selected>その他一般</option>
+                            <option value="加盟（入居）団体">加盟（入居）団体</option>
+                            <option value="高校生以下">高校生以下</option>
+                        </select>
+                    </div>
+                    <div style="flex:2;">
+                        <label>但し書き</label><input type="text" id="in_proviso" value="施設使用料として" oninput="calc()">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="input-card">
+                <label>予約情報（施設・日時）</label>
+                <div id="res_container">
+                    <script>
+                        for(let i=1; i<=3; i++) {
+                            document.write(`
+                            <div class="res-row">
+                                <select id="fac_${i}" class="fac-sel" onchange="calc()">
+                                    <option value="">-- 施設選択 --</option>
+                                    <option value="体育館">体育館</option>
+                                    <option value="会議室AB">会議室 AB</option>
+                                    <option value="会議室A">会議室 A</option>
+                                    <option value="会議室B">会議室 B</option>
+                                </select>
+                                <input type="date" id="date_${i}" class="date-sel" onchange="calc()">
+                                <select id="ts_${i}" class="time-sel" onchange="calc()">${tOpt("09:00")}</select> ～
+                                <select id="te_${i}" class="time-sel" onchange="calc()">${tOpt("12:00")}</select>
+                                <label style="margin:0; font-size:11px;"><input type="checkbox" id="ac_${i}" onchange="calc()" style="width:auto;">空調</label>
+                            </div>`);
+                        }
+                        function tOpt(def){
+                            let hhtml = "";
+                            for(let h=9; h<=21; h++) {
+                                ["00","30"].forEach(m => {
+                                    let t = h.toString().padStart(2,'0')+":"+m;
+                                    if(t<="21:00") hhtml += `<option value="${t}" ${t===def?'selected':''}>${t}</option>`;
+                                });
+                            }
+                            return hhtml;
+                        }
+                    </script>
+                    
+                    <div style="margin-top: 15px; border-top: 1px dashed #cbd5e1; padding-top: 10px;">
+                        <label style="color:#64748b;">その他予約（4日目以降や直接入力用）</label>
+                        <div style="display:flex; gap:8px; margin-bottom:8px;">
+                            <input type="text" id="in_other_desc" placeholder="例: 体育館(04/01) 昼@770×2h" oninput="calc()" style="flex:3;">
+                            <input type="number" id="in_other_amt" placeholder="金額(円)" oninput="calc()" style="flex:1;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="sidebar-sticky">
+                <div class="calc-panel">
+                    <label>合計金額</label>
+                    <div class="total-display" id="ui_total">￥0</div>
+                    <div class="change-group">
+                        <label>預かり金</label>
+                        <input type="number" id="in_cash" placeholder="金額を入力" oninput="calc()" style="font-size:1.2rem; font-weight:bold;">
+                        <div class="change-row" style="margin-top:15px;">
+                            <label>おつり</label>
+                            <div class="change-val" id="ui_change">￥0</div>
+                        </div>
+                    </div>
+                    <button class="print-btn" id="print_btn" onclick="saveAndPrint()">領収書を印刷（A4 1枚）</button>
+                    <div id="status_text" style="text-align:center; font-size:11px; margin-top:8px; color:#64748b;"></div>
+                </div>
+
+                <div class="input-card" style="margin-bottom:0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                    <label>入力中の計算式（内訳）</label>
+                    <div id="formula_log" class="formula-log">施設を選択してください</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="fee-table-container">
+        <div style="flex: 2; min-width: 400px;">
+            <h3 style="margin:0 0 10px 0; color:var(--primary); font-size:1.1rem;">【確認用】施設使用料（1時間あたり/税込）</h3>
+            <table class="fee-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2">施設名</th>
+                        <th>高校生以下</th>
+                        <th>加盟・入居団体</th>
+                        <th>その他一般</th>
+                    </tr>
+                    <tr>
+                        <th style="font-size:0.75rem; font-weight:normal;">昼 / 夜・休日</th>
+                        <th style="font-size:0.75rem; font-weight:normal;">昼 / 夜・休日</th>
+                        <th style="font-size:0.75rem; font-weight:normal;">昼 / 夜・休日</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>体育館</td><td>770円 / 1,100円</td><td>770円 / 1,100円</td><td>1,100円 / 1,650円</td></tr>
+                    <tr><td>会議室AB</td><td class="diagonal-cell"></td><td>770円 / 1,100円</td><td>1,100円 / 1,650円</td></tr>
+                    <tr><td>会議室A</td><td class="diagonal-cell"></td><td>440円 / 660円</td><td>660円 / 990円</td></tr>
+                    <tr><td>会議室B</td><td class="diagonal-cell"></td><td>330円 / 440円</td><td>440円 / 660円</td></tr>
+                </tbody>
+            </table>
+            <div class="fee-note">※昼：平日9時～17時　※夜・休日：平日17時～21時 および 土日祝9時～21時</div>
+        </div>
+        
+        <div style="flex: 1; min-width: 250px;">
+            <h3 style="margin:0 0 10px 0; color:var(--primary); font-size:1.1rem;">空調（冷暖房）使用料</h3>
+            <table class="fee-table">
+                <tr><th>施設名</th><th>使用料(1hあたり)</th></tr>
+                <tr><td>会議室 A</td><td>330円</td></tr>
+                <tr><td>会議室 B</td><td>220円</td></tr>
+                <tr><td>会議室 AB</td><td>550円</td></tr>
+            </table>
+            <div class="fee-note">※利用する場合は上記料金に追加</div>
+        </div>
+    </div>
+</div>
+
+<div class="print-only" id="print_area"></div>
+
+<script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwr_c6iEZCJm9Anz1ewsLhWT_MQYmocVPxCvIdDblCzkXG-sPLlUDDPAUAxBYZD_m7EdQ/exec";
+    
+    let currentData = { name: "", amount: 0, details: "", staff: "", proviso: "" };
+
+    window.onload = () => {
+        const savedStaff = localStorage.getItem('receipt_staff_name');
+        if (savedStaff) document.getElementById('in_staff').value = savedStaff;
+        calc();
+    };
+
+    function isHoliday(dateStr) {
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        const year = d.getFullYear(), month = d.getMonth() + 1, day = d.getDate();
+        const w = d.getDay();
+        if (w === 0 || w === 6) return true; 
+        const fixed = { 1: [1], 2: [11, 23], 4: [29], 5: [3, 4, 5], 8: [11], 11: [3, 23] };
+        if (fixed[month] && fixed[month].includes(day)) return true;
+        const getMonday = (m, week) => {
+            const firstDay = new Date(year, m - 1, 1).getDay();
+            let d = 1 + (8 - firstDay) % 7; 
+            d += (week - 1) * 7;
+            return d;
+        };
+        if (month === 1 && day === getMonday(1, 2)) return true;
+        if (month === 7 && day === getMonday(7, 3)) return true;
+        if (month === 9 && day === getMonday(9, 3)) return true;
+        if (month === 10 && day === getMonday(10, 2)) return true;
+        if (month === 3 && day === Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4))) return true;
+        if (month === 9 && day === Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4))) return true;
+        const prevDayStr = new Date(d.getTime() - 86400000).toISOString().split('T')[0];
+        const prevD = new Date(prevDayStr);
+        if (prevD.getDay() === 0 && isHoliday(prevDayStr)) return true;
+        return false;
+    }
+
+    const RATES = {
+        "体育館": { "高校生以下": {d:770, n:1100, w:1100}, "加盟（入居）団体": {d:770, n:1100, w:1100}, "その他一般": {d:1100, n:1650, w:1650} },
+        "会議室AB": { "加盟（入居）団体": {d:770, n:1100, w:1100}, "その他一般": {d:1100, n:1650, w:1650} },
+        "会議室A": { "加盟（入居）団体": {d:440, n:660, w:660}, "その他一般": {d:660, n:990, w:990} },
+        "会議室B": { "加盟（入居）団体": {d:330, n:440, w:440}, "その他一般": {d:440, n:660, w:660} }
+    };
+    const AC = { "会議室AB": 550, "会議室A": 330, "会議室B": 220, "体育館": 0 };
+
+    function calc() {
+        const cat = document.getElementById('in_cat').value;
+        const name = document.getElementById('in_name').value || "　　　　　　";
+        const staff = document.getElementById('in_staff').value;
+        const proviso = document.getElementById('in_proviso').value || "施設使用料";
+        
+        localStorage.setItem('receipt_staff_name', staff);
+
+        let grandTotal = 0, rowsHtml = "", logHtml = "", logText = "";
+        let rowCount = 0;
+
+        for (let i = 1; i <= 3; i++) {
+            const fac = document.getElementById('fac_'+i).value;
+            const dStr = document.getElementById('date_'+i).value;
+            const sVal = document.getElementById('ts_'+i).value, eVal = document.getElementById('te_'+i).value;
+            const acOn = document.getElementById('ac_'+i).checked;
+            if (fac && dStr) {
+                const isW = isHoliday(dStr);
+                const hs = parseInt(sVal.split(':')[0]) + parseInt(sVal.split(':')[1])/60;
+                const he = parseInt(eVal.split(':')[0]) + parseInt(eVal.split(':')[1])/60;
+                const r = RATES[fac][(fac.includes("会議室") && cat === "高校生以下") ? "その他一般" : cat];
+                const feeAC = acOn ? AC[fac] : 0;
+                let lineTotal = 0, note = "";
+                if (isW) {
+                    const h = Math.max(0, he - hs);
+                    lineTotal = (r.w + feeAC) * h;
+                    note = `@${(r.w+feeAC).toLocaleString()} × ${h.toFixed(1)}h(休日)`;
+                } else {
+                    const dH = Math.max(0, Math.min(he, 17) - Math.min(hs, 17));
+                    const nH = Math.max(0, Math.max(he, 17) - Math.max(hs, 17));
+                    lineTotal = ((r.d + feeAC) * dH) + ((r.n + feeAC) * nH);
+                    note = dH && nH ? `昼@${r.d+feeAC}×${dH}h+夜@${r.n+feeAC}×${nH}h` : 
+                           nH ? `@${r.n+feeAC}×${nH.toFixed(1)}h(夜間)` : `@${r.d+feeAC}×${dH.toFixed(1)}h(昼間)`;
+                }
+                const rounded = Math.ceil(lineTotal);
+                grandTotal += rounded;
+                rowsHtml += `<tr><td>${fac}(${dStr.slice(5).replace('-','/')})</td><td>${note}</td><td style="text-align:right;">￥${rounded.toLocaleString()}</td></tr>`;
+                logHtml += `<div style="margin-bottom:4px;"><strong>予約${i}:</strong> ${fac}(${dStr.slice(5)})<br><span style="color:#64748b; font-size:0.8rem;">${note} = ￥${rounded.toLocaleString()}</span></div>`;
+                logText += `${fac}(${dStr}):${note} / `;
+                rowCount++;
+            }
+        }
+
+        // その他予約（1行）の計算
+        const otherDesc = document.getElementById('in_other_desc').value;
+        const otherAmt = parseInt(document.getElementById('in_other_amt').value) || 0;
+        if (otherDesc || otherAmt > 0) {
+            grandTotal += otherAmt;
+            // 印刷時の表では、施設・内訳を2列分結合して表示させます
+            rowsHtml += `<tr><td colspan="2">${otherDesc}</td><td style="text-align:right;">￥${otherAmt.toLocaleString()}</td></tr>`;
+            logHtml += `<div style="margin-bottom:4px;"><strong>追加予約:</strong> ${otherDesc}<br><span style="color:#64748b; font-size:0.8rem;">金額 = ￥${otherAmt.toLocaleString()}</span></div>`;
+            logText += `${otherDesc} / `;
+            rowCount++;
+        }
+
+        currentData = { name: name, amount: grandTotal, details: logText, staff: staff, proviso: proviso };
+        
+        document.getElementById('ui_total').innerText = "￥" + grandTotal.toLocaleString();
+        document.getElementById('formula_log').innerHTML = logHtml || "<span style='color:#94a3b8;'>施設を選択してください</span>";
+        
+        const cash = parseInt(document.getElementById('in_cash').value) || 0;
+        document.getElementById('ui_change').innerText = "￥" + (cash >= grandTotal ? (cash - grandTotal).toLocaleString() : "0");
+
+        const base = Math.ceil(grandTotal / 1.1), tax = grandTotal - base;
+        const dateStr = `令和 ${new Date().getFullYear()-2018}年 ${new Date().getMonth()+1}月 ${new Date().getDate()}日`;
+        while(rowCount < 4) {
+            rowsHtml += "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>";
+            rowCount++;
+        }
+
+        const template = (typeLabel) => `
+            <div class="receipt-section">
+                <div class="p-type">${typeLabel}</div>
+                <div class="p-title">領 収 証</div>
+                <div class="p-client">${name}</div>
+                <div class="p-amount">一金 ￥${grandTotal.toLocaleString()} －</div>
+                
+                <div style="margin-bottom:2mm; font-size:10pt;">但し ${proviso} として</div>
+                
+                <table class="p-table">
+                    <thead><tr><th style="width:30%;">施設・日時</th><th>計算式</th><th style="width:20%;">金額</th></tr></thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div class="p-info-flex">
+                    <div>
+                        <div class="p-date">${dateStr}</div>
+                        ${staff ? `<div style="font-size:10pt; margin-top:3mm; color:#333;">受付担当: ${staff}</div>` : ''}
+                    </div>
+                    <div class="p-tax-box">
+                        10%対象：￥${base.toLocaleString()}<br>
+                        消費税等：￥${tax.toLocaleString()}<br>
+                        登録番号 T6360005004293
+                    </div>
+                </div>
+                <div class="p-stamp">取扱者印</div>
+                <div class="p-issuer">
+                    <strong>公益財団法人 沖縄県スポーツ協会</strong>
+                    <div class="p-address">
+                        〒900-0026 那覇市奥武山町 51-2<br>
+                        電話 (098) 857-0017 (代)
+                    </div>
+                </div>
+            </div>`;
+        document.getElementById('print_area').innerHTML = template("原本") + template("控");
+    }
+
+    async function saveAndPrint() {
+        if (!currentData.name || currentData.amount === 0) {
+            alert("宛名と金額を確認してください。");
+            return;
+        }
+        const btn = document.getElementById('print_btn');
+        const status = document.getElementById('status_text');
+        btn.disabled = true;
+        status.innerText = "台帳に記録中...";
+        try {
+            await fetch(GAS_URL, { method: "POST", body: JSON.stringify(currentData) });
+            status.innerText = "記録完了。印刷します。";
+            window.print();
+        } catch (e) {
+            console.error(e);
+            alert("記録に失敗しましたが印刷は可能です。");
+            window.print();
+        } finally {
+            btn.disabled = false;
+            setTimeout(() => { status.innerText = ""; }, 3000);
+        }
+    }
+</script>
+</body>
+</html>
