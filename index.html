@@ -89,7 +89,7 @@
             <div class="input-card">
                 <div style="display:flex; gap:15px; margin-bottom:10px;">
                     <div style="flex:2;">
-                        <label>宛名</label><input type="text" id="in_name" placeholder="公益財団法人沖縄県スポーツ協会 殿" oninput="calc()">
+                        <label>宛名</label><input type="text" id="in_name" placeholder="例: 〇〇スポーツクラブ 殿" oninput="calc()">
                     </div>
                     <div style="flex:1;">
                         <label>受付担当者</label><input type="text" id="in_staff" placeholder="例: 沖縄" oninput="calc()">
@@ -127,7 +127,7 @@
                                 <input type="date" id="date_${i}" class="date-sel" onchange="calc()">
                                 <select id="ts_${i}" class="time-sel" onchange="calc()">${tOpt("09:00")}</select> ～
                                 <select id="te_${i}" class="time-sel" onchange="calc()">${tOpt("12:00")}</select>
-                                <label style="margin:0; font-size:11px;"><input type="checkbox" id="ac_${i}" onchange="calc()" style="width:auto;">空調</label>
+                                <label class="ac-check-label" id="ac_label_${i}" style="margin:0; font-size:11px; display:flex; align-items:center; cursor:pointer;"><input type="checkbox" id="ac_${i}" onchange="calc()" style="width:auto; margin-right:4px;">空調</label>
                             </div>`);
                         }
                         function tOpt(def){
@@ -212,6 +212,7 @@
                 <tr><td>会議室 A</td><td>330円</td></tr>
                 <tr><td>会議室 B</td><td>220円</td></tr>
                 <tr><td>会議室 AB</td><td>550円</td></tr>
+                <tr><td>体育館</td><td>設備なし</td></tr>
             </table>
             <div class="fee-note">※利用する場合は上記料金に追加</div>
         </div>
@@ -225,36 +226,31 @@
     
     let currentData = { name: "", amount: 0, details: "", staff: "", proviso: "" };
 
+    // ★ 申請書システムと同じ 2026年～2029年の祝日配列を追加
+    const HOLIDAYS = [
+        // 2026
+        "2026-01-01", "2026-01-12", "2026-02-11", "2026-02-23", "2026-03-20", "2026-04-29", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06", "2026-07-20", "2026-08-11", "2026-09-21", "2026-09-22", "2026-09-23", "2026-10-12", "2026-11-03", "2026-11-23",
+        // 2027
+        "2027-01-01", "2027-01-11", "2027-02-11", "2027-02-23", "2027-03-21", "2027-03-22", "2027-04-29", "2027-05-03", "2027-05-04", "2027-05-05", "2027-07-19", "2027-08-11", "2027-09-20", "2027-09-23", "2027-10-11", "2027-11-03", "2027-11-23",
+        // 2028
+        "2028-01-01", "2028-01-10", "2028-02-11", "2028-02-23", "2028-03-20", "2028-04-29", "2028-05-03", "2028-05-04", "2028-05-05", "2028-07-17", "2028-08-11", "2028-09-18", "2028-09-22", "2028-10-09", "2028-11-03", "2028-11-23",
+        // 2029
+        "2029-01-01", "2029-01-08", "2029-02-11", "2029-02-12", "2029-02-23", "2029-03-20", "2029-04-29", "2029-04-30", "2029-05-03", "2029-05-04", "2029-05-05", "2029-07-16", "2029-08-11", "2029-09-17", "2029-09-23", "2029-09-24", "2029-10-08", "2029-11-03", "2029-11-23"
+    ];
+
     window.onload = () => {
         const savedStaff = localStorage.getItem('receipt_staff_name');
         if (savedStaff) document.getElementById('in_staff').value = savedStaff;
         calc();
     };
 
+    // ★ 祝日判定を申請書と統一（土日・配列チェックのみの確実なもの）
     function isHoliday(dateStr) {
         if (!dateStr) return false;
         const d = new Date(dateStr);
-        const year = d.getFullYear(), month = d.getMonth() + 1, day = d.getDate();
         const w = d.getDay();
         if (w === 0 || w === 6) return true; 
-        const fixed = { 1: [1], 2: [11, 23], 4: [29], 5: [3, 4, 5], 8: [11], 11: [3, 23] };
-        if (fixed[month] && fixed[month].includes(day)) return true;
-        const getMonday = (m, week) => {
-            const firstDay = new Date(year, m - 1, 1).getDay();
-            let d = 1 + (8 - firstDay) % 7; 
-            d += (week - 1) * 7;
-            return d;
-        };
-        if (month === 1 && day === getMonday(1, 2)) return true;
-        if (month === 7 && day === getMonday(7, 3)) return true;
-        if (month === 9 && day === getMonday(9, 3)) return true;
-        if (month === 10 && day === getMonday(10, 2)) return true;
-        if (month === 3 && day === Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4))) return true;
-        if (month === 9 && day === Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4))) return true;
-        const prevDayStr = new Date(d.getTime() - 86400000).toISOString().split('T')[0];
-        const prevD = new Date(prevDayStr);
-        if (prevD.getDay() === 0 && isHoliday(prevDayStr)) return true;
-        return false;
+        return HOLIDAYS.includes(dateStr);
     }
 
     const RATES = {
@@ -280,16 +276,37 @@
             const fac = document.getElementById('fac_'+i).value;
             const dStr = document.getElementById('date_'+i).value;
             const sVal = document.getElementById('ts_'+i).value, eVal = document.getElementById('te_'+i).value;
-            const acOn = document.getElementById('ac_'+i).checked;
+            const acCheck = document.getElementById('ac_'+i);
+            const acLabel = document.getElementById('ac_label_'+i);
+
+            // ★ 体育館の空調制御（申請書システムと同じ処理）
+            if (fac === '体育館') {
+                acCheck.checked = false;
+                acCheck.disabled = true;
+                acLabel.style.opacity = '0.5';
+                acLabel.style.cursor = 'not-allowed';
+            } else {
+                acCheck.disabled = false;
+                acLabel.style.opacity = '1';
+                acLabel.style.cursor = 'pointer';
+            }
+
+            const acOn = acCheck.checked;
+
             if (fac && dStr) {
                 const isW = isHoliday(dStr);
                 const hs = parseInt(sVal.split(':')[0]) + parseInt(sVal.split(':')[1])/60;
                 const he = parseInt(eVal.split(':')[0]) + parseInt(eVal.split(':')[1])/60;
-                const r = RATES[fac][(fac.includes("会議室") && cat === "高校生以下") ? "その他一般" : cat];
+                
+                if (he <= hs) continue; // 時間が逆転している場合は計算しない
+
+                let targetCat = (fac.includes("会議室") && cat === "高校生以下") ? "その他一般" : cat;
+                const r = RATES[fac][targetCat];
                 const feeAC = acOn ? AC[fac] : 0;
+                
                 let lineTotal = 0, note = "";
                 if (isW) {
-                    const h = Math.max(0, he - hs);
+                    const h = he - hs;
                     lineTotal = (r.w + feeAC) * h;
                     note = `@${(r.w+feeAC).toLocaleString()} × ${h.toFixed(1)}h(休日)`;
                 } else {
@@ -301,9 +318,11 @@
                 }
                 const rounded = Math.ceil(lineTotal);
                 grandTotal += rounded;
-                rowsHtml += `<tr><td>${fac}(${dStr.slice(5).replace('-','/')})</td><td>${note}</td><td style="text-align:right;">￥${rounded.toLocaleString()}</td></tr>`;
-                logHtml += `<div style="margin-bottom:4px;"><strong>予約${i}:</strong> ${fac}(${dStr.slice(5)})<br><span style="color:#64748b; font-size:0.8rem;">${note} = ￥${rounded.toLocaleString()}</span></div>`;
-                logText += `${fac}(${dStr}):${note} / `;
+                
+                const acTag = acOn ? '<span style="font-size:0.8em">[空調]</span>' : '';
+                rowsHtml += `<tr><td>${fac}(${dStr.slice(5).replace('-','/')}) ${acTag}</td><td>${note}</td><td style="text-align:right;">￥${rounded.toLocaleString()}</td></tr>`;
+                logHtml += `<div style="margin-bottom:4px;"><strong>予約${i}:</strong> ${fac}(${dStr.slice(5)}) ${acOn?'[空調]':''}<br><span style="color:#64748b; font-size:0.8rem;">${note} = ￥${rounded.toLocaleString()}</span></div>`;
+                logText += `${fac}(${dStr})${acOn?'[空調]':''}:${note} / `;
                 rowCount++;
             }
         }
@@ -313,7 +332,6 @@
         const otherAmt = parseInt(document.getElementById('in_other_amt').value) || 0;
         if (otherDesc || otherAmt > 0) {
             grandTotal += otherAmt;
-            // 印刷時の表では、施設・内訳を2列分結合して表示させます
             rowsHtml += `<tr><td colspan="2">${otherDesc}</td><td style="text-align:right;">￥${otherAmt.toLocaleString()}</td></tr>`;
             logHtml += `<div style="margin-bottom:4px;"><strong>追加予約:</strong> ${otherDesc}<br><span style="color:#64748b; font-size:0.8rem;">金額 = ￥${otherAmt.toLocaleString()}</span></div>`;
             logText += `${otherDesc} / `;
@@ -380,8 +398,15 @@
         const status = document.getElementById('status_text');
         btn.disabled = true;
         status.innerText = "台帳に記録中...";
+        
         try {
-            await fetch(GAS_URL, { method: "POST", body: JSON.stringify(currentData) });
+            // ★ GASへの送信エラー対策（mode: 'no-cors' と Content-Typeの指定を追加）
+            await fetch(GAS_URL, { 
+                method: "POST", 
+                mode: "no-cors",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: JSON.stringify(currentData) 
+            });
             status.innerText = "記録完了。印刷します。";
             window.print();
         } catch (e) {
